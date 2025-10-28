@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bootstrap Tycoon — Économie Lente (Paperclip-like)</title>
+  <meta name="description" content="Tycoon en un fichier — progression lente, reset total, gains passifs fixes, upgrades à niveaux, prestige + talents."/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root{ --accent:#8a4fff; --accent-2:#6f42c1; --muted:#9aa3b2; }
+    *{ box-sizing: border-box }
+    body{
+      background: radial-gradient(1200px 800px at 10% -10%, #212838 0%, #0f1219 40%, #0b0e14 100%) fixed;
+      font-family: system-ui,-apple-system,Segoe UI,Roboto,Inter,"Helvetica Neue",Arial,"Noto Sans";
+    }
+    .glass{
+      background: color-mix(in oklab, #0b0e14 85%, white 0%);
+      border:1px solid color-mix(in oklab, #fff 15%, #000 85%);
+      backdrop-filter: blur(6px);
+      border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.05);
+    }
+    .btn-accent{
+      --bs-btn-bg: var(--accent); --bs-btn-border-color: var(--accent);
+      --bs-btn-hover-bg: color-mix(in oklab, var(--accent) 80%, white 20%);
+      --bs-btn-hover-border-color: color-mix(in oklab, var(--accent) 80%, white 20%);
+      --bs-btn-active-bg: color-mix(in oklab, var(--accent) 65%, black 35%);
+      --bs-btn-color:#fff;
+    }
+    .money{ font-weight:800; letter-spacing:.25px; text-shadow:0 2px 12px rgba(138,79,255,.35); }
+    .badge-pill{ font-variant-numeric: tabular-nums; background:#11141b; border:1px solid #2a3142; color:#cbd5e1; padding:.35rem .55rem; border-radius:999px; }
+    .shop-item{ background:#121722; border:1px solid #283246; border-radius:14px; padding:.9rem; transition:transform .08s ease; }
+    .shop-item:active{ transform: scale(.99); } .shop-item.disabled{ opacity:.5; filter:grayscale(.2); pointer-events:none; }
+    .price{ font-variant-numeric: tabular-nums; }
+    .meter{ height:8px; background:#0f1420; border-radius:999px; overflow:hidden; border:1px solid #25304a; }
+    .meter>span{ display:block; height:100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width:0%; }
+    .float-gain{
+      position: fixed; pointer-events:none; z-index: 2000; font-weight:800;
+      font-size: clamp(14px, 1.2vw + 10px, 22px); color:#b9ffb3;
+      text-shadow:0 0 10px rgba(34,197,94,.45), 0 2px 0 rgba(0,0,0,.3);
+      opacity:0; transform: translate(-50%, -10px) scale(.95);
+      animation: popUp .9s ease-out forwards;
+    }
+    @keyframes popUp{
+      0%{ opacity:.05; transform: translate(-50%, 10px) scale(.7); }
+      20%{ opacity:1; transform: translate(-50%, -4px) scale(1.02); }
+      70%{ opacity:.95; transform: translate(-50%, -24px) scale(1.0); }
+      100%{ opacity:0; transform: translate(-50%, -46px) scale(.98); }
+    }
+    .stack-sm{ display:grid; grid-template-columns: 1fr 1fr; gap:1rem; }
+    @media (max-width: 992px){ .stack-sm{ grid-template-columns:1fr; } }
+    .footer-muted{ color:var(--muted); } .pointer{ cursor:pointer; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg border-bottom border-secondary-subtle" style="background:#0e1320b8; backdrop-filter: blur(6px);">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#"><i class="bi bi-building"></i> Bootstrap Tycoon</a>
+      <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
+        <span class="badge-pill" id="prestigeBadge" title="Prestige total">P0 (+0%)</span>
+        <span class="badge-pill" id="rateBadge" title="Revenus fixes par seconde">0 $/s</span>
+        <button class="btn btn-sm btn-outline-warning" id="openPrestige" data-bs-toggle="modal" data-bs-target="#prestigeModal">
+          <i class="bi bi-stars"></i> Prestige
+        </button>
+        <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#helpModal">
+          <i class="bi bi-question-circle"></i> Aide
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container my-4">
+    <section class="glass p-3 p-md-4 mb-4">
+      <div class="d-flex flex-column flex-md-row align-items-center justify-content-between gap-3">
+        <div>
+          <div class="text-secondary small">Trésorerie</div>
+          <div class="h1 money m-0" id="money" aria-live="polite">$0</div>
+          <div class="text-secondary small">Total gagné (toutes runs) : <span id="lifetime">$0</span></div>
+        </div>
+        <div class="text-center">
+          <button id="earnBtn" class="btn btn-lg btn-accent px-4 py-3 shadow pointer">
+            <i class="bi bi-cash-coin me-2"></i>
+            Gagner de l'argent
+            <small class="d-block text-white-50 fw-normal">+<span id="clickGain">1</span>$ / clic (avant bonus)</small>
+          </button>
+        </div>
+        <div class="w-100 w-md-25" style="max-width:460px">
+          <div class="d-flex justify-content-between small text-secondary">
+            <span>Progression vers le prochain point de Prestige</span><span id="prestigeMeterLabel">0%</span>
+          </div>
+          <div class="meter mt-1"><span id="prestigeMeterFill"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stack-sm">
+      <div class="glass p-3 p-md-4">
+        <h5 class="mb-3"><i class="bi bi-graph-up-arrow me-2"></i>Améliorations (niveaux)</h5>
+        <div class="row g-3" id="upgradesList"></div>
+      </div>
+
+      <div class="glass p-3 p-md-4">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h5 class="m-0"><i class="bi bi-shop me-2"></i>Entreprises</h5>
+          <div class="d-flex align-items-center gap-2">
+            <button id="saveBtn" class="btn btn-outline-light btn-sm"><i class="bi bi-cloud-check"></i> Sauvegarder</button>
+            <button id="resetBtn" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3"></i> Reset total</button>
+          </div>
+        </div>
+        <div class="row g-3" id="shopList"></div>
+      </div>
+    </section>
+
+    <p class="mt-4 text-center footer-muted small">Gains passifs crédités <b>à la seconde</b> (fixes). Reset total efface Prestige, Talents et Lifetime.</p>
+  </main>
+
+  <!-- Help Modal -->
+  <div class="modal fade" id="helpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content glass">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-info-circle me-2"></i>Comment jouer</h5>
+          <button class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <ul class="mb-2">
+            <li>Clique pour obtenir des $ (animés).</li>
+            <li>Achète des <b>Améliorations</b> : additifs jusqu’à <b>Lv.100</b>, multiplicateurs limités à <b>Lv.10</b>.</li>
+            <li>Les <b>Entreprises</b> génèrent des <b>$/s</b> très faibles au début — progression lente type Paperclip.</li>
+            <li><b>Prestige</b> et <b>Talents</b> existent, mais <b>Reset total</b> les efface aussi.</li>
+          </ul>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-accent" data-bs-dismiss="modal">Ok</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prestige + Talents Modal -->
+  <div class="modal fade" id="prestigeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content glass">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-stars me-2"></i>Prestige & Talents</h5>
+          <button class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <ul class="nav nav-tabs" role="tablist">
+            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pane-prestige" type="button">Prestige</button></li>
+            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-talents" type="button">Talents</button></li>
+          </ul>
+
+          <div class="tab-content pt-3">
+            <div class="tab-pane fade show active" id="pane-prestige">
+              <p class="mb-2">1 point de Prestige tous les <b>100 000 $</b> de <b>gains totaux</b>. Bonus : <b>+5%/pt</b> jusqu’à P50, puis <b>+2,5%/pt</b>.</p>
+              <div class="p-3 rounded-3 border" style="background:#0f1420;border-color:#27314a">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <div>
+                    <div class="small text-secondary">Points actuels</div>
+                    <div class="fs-5"><span id="prestigePoints">0</span> pts (<span id="prestigeBonusPct">+0%</span>)</div>
+                  </div>
+                  <div class="text-end">
+                    <div class="small text-secondary">Points disponibles</div>
+                    <div class="fs-5"><span id="prestigeAvailable">0</span> pts</div>
+                  </div>
+                </div>
+                <div class="small text-secondary mb-1">Progression vers le prochain point</div>
+                <div class="meter"><span id="prestigeModalMeterFill"></span></div>
+                <div class="d-flex justify-content-between small text-secondary mt-1">
+                  <span>Seuil : 100 000 $</span>
+                  <span>Reste : <span id="prestigeToNext">$0</span></span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="pane-talents">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                  <div class="small text-secondary">Jetons dispo</div>
+                  <div class="fs-5"><span id="talentTokens">0</span> jeton(s)</div>
+                </div>
+                <div class="text-end small text-secondary">1 jeton / <b>5 points</b> de Prestige. Talents permanents.</div>
+              </div>
+              <div class="row g-3" id="talentsList"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer justify-content-between">
+          <div class="small text-secondary">Prestige réinitialise la run (mais pas Prestige/Talents). <b>Reset total</b> efface tout.</div>
+          <button id="doPrestigeBtn" class="btn btn-warning"><i class="bi bi-rocket-takeoff me-1"></i> Monter en Prestige</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    /************** Core **************/
+    const SAVE_KEY = "bootstrap_tycoon_v5_paperclip";
+    const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+
+    // Progression lente
+    const PRICE_GROWTH = 1.35;
+
+    // Prestige
+    const PRESTIGE_THRESHOLD = 100000;
+    const PRESTIGE_BONUS_PER_POINT = 0.05;
+    const PRESTIGE_SOFTCAP_AFTER = 50;
+
+    // Talents
+    const TALENT_DEFS = [
+      { id:"t_click",   name:"Maître du Clic",   desc:"+10% gains par clic par niveau.",      max:10, type:"mult_click",   step:0.10 },
+      { id:"t_passive", name:"Rendement Passif", desc:"+10% revenus passifs par niveau.",     max:10, type:"mult_passive", step:0.10 },
+      { id:"t_cost",    name:"Achats Malins",    desc:"-5% coûts upgrades/entreprises / niv.",max:10, type:"cost_redux",   step:0.05 },
+      { id:"t_offline", name:"Hors-ligne+",      desc:"+2h de cap gains hors-ligne / niv.",   max:8,  type:"offline_cap",  step:2*60*60 }
+    ];
+
+    const game = {
+      money: 0,
+      lifetime: 0,
+      clickGain: 1,
+      lastTick: Date.now(),
+      upgrades: {},       // id -> level
+      producers: {},      // id -> count
+      prestige: { points:0, claimed:0 },
+      talents: { levels:{}, spentTokens:0 }
+    };
+
+    /************** Defs **************/
+    // Producteurs très lents
+    const SHOP_DEFS = [
+      { id:"stand",   name:"Kiosque",   icon:"bi-shop",    baseCost:  150,   baseRate: 0.02 },
+      { id:"store",   name:"Magasin",   icon:"bi-building",baseCost:  900,   baseRate: 0.10 },
+      { id:"factory", name:"Usine",     icon:"bi-gear",    baseCost:  6000,  baseRate: 0.50 },
+      { id:"hq",      name:"Siège",     icon:"bi-bank2",   baseCost:  32000, baseRate: 2.50 },
+      { id:"ai",      name:"IA R&D",    icon:"bi-cpu",     baseCost: 160000, baseRate:10.00 }
+    ];
+
+    // Upgrades à niveaux (additifs jusqu'à 100, multiplicateurs limités à 10)
+    const UPGRADE_DEFS = [
+      // CLIC — additifs (Lv.100)
+      { id:"c_add1",   name:"+1 $/clic",        desc:"Optimisation interface.",          baseCost:   60, type:"add_click",    amount:1,   max:100 },
+      { id:"c_add2",   name:"+2 $/clic",        desc:"Micro-upsell.",                    baseCost:  300, type:"add_click",    amount:2,   max:100 },
+      { id:"c_add5",   name:"+5 $/clic",        desc:"Automatisation.",                  baseCost: 1200, type:"add_click",    amount:5,   max:100 },
+      { id:"c_add10",  name:"+10 $/clic",       desc:"Bundles.",                         baseCost: 5200, type:"add_click",    amount:10,  max:100 },
+      { id:"c_add25",  name:"+25 $/clic",       desc:"Ventes croisée/AB test.",          baseCost:22000, type:"add_click",    amount:25,  max:100 },
+
+      // CLIC — multiplicateurs (Lv.10)
+      { id:"c_x1_5",   name:"x1.5 clic",        desc:"UX & rétention.",                  baseCost:  9000, type:"mult_click", amount:1.5, max:10 },
+      { id:"c_x2",     name:"x2 clic",          desc:"Virality/communauté.",             baseCost: 38000, type:"mult_click", amount:2.0, max:10 },
+
+      // PASSIF — multiplicateurs globaux (Lv.10)
+      { id:"p_x1_05",  name:"Passif +5%",       desc:"Préventif & qualité.",             baseCost:  2000, type:"mult_passive", amount:1.05, max:10 },
+      { id:"p_x1_10",  name:"Passif +10%",      desc:"Flux tirés/digitalisation.",       baseCost:  9000, type:"mult_passive", amount:1.10, max:10 },
+      { id:"p_x1_15",  name:"Passif +15%",      desc:"Énergie optimisée.",               baseCost: 32000, type:"mult_passive", amount:1.15, max:10 },
+      { id:"p_x1_20",  name:"Passif +20%",      desc:"Data/IA dans l'usine.",            baseCost:120000, type:"mult_passive", amount:1.20, max:10 }
+    ];
+
+    /************** DOM **************/
+    const $ = s => document.querySelector(s);
+    const el = html => { const d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstElementChild; };
+
+    const moneyEl = $("#money");
+    const lifetimeEl = $("#lifetime");
+    const clickGainEl = $("#clickGain");
+    const rateBadge = $("#rateBadge");
+    const prestigeBadge = $("#prestigeBadge");
+    const prestigeMeterFill = $("#prestigeMeterFill");
+    const prestigeMeterLabel = $("#prestigeMeterLabel");
+    const prestigePointsEl = $("#prestigePoints");
+    const prestigeBonusPctEl = $("#prestigeBonusPct");
+    const prestigeAvailableEl = $("#prestigeAvailable");
+    const prestigeModalMeterFill = $("#prestigeModalMeterFill");
+    const prestigeToNextEl = $("#prestigeToNext");
+    const doPrestigeBtn = $("#doPrestigeBtn");
+    const talentTokensEl = $("#talentTokens");
+    const talentsList = $("#talentsList");
+
+    /************** Utils **************/
+    function abbreviate(n){
+      const units = ["", "K", "M", "B", "T", "Qa", "Qi"];
+      let u = 0; while(n >= 1000 && u < units.length-1){ n/=1000; u++; }
+      return `${fmt.format(n)}${units[u]}`;
+    }
+
+    function load(){
+      const raw = localStorage.getItem(SAVE_KEY);
+      if(!raw) return;
+      try{
+        const data = JSON.parse(raw);
+        Object.assign(game, data);
+        game.prestige ||= { points:0, claimed:0 };
+        game.talents ||= { levels:{}, spentTokens:0 }; game.talents.levels ||= {};
+      }catch(e){ console.warn("Bad save", e); }
+    }
+    function save(forceTime=true){ if(forceTime) game.lastTick = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(game)); }
+
+    function prestigeMultiplier(){
+      const p = game.prestige.points;
+      const base = Math.min(p, PRESTIGE_SOFTCAP_AFTER) * PRESTIGE_BONUS_PER_POINT;
+      const extra = Math.max(0, p - PRESTIGE_SOFTCAP_AFTER) * (PRESTIGE_BONUS_PER_POINT/2);
+      return 1 + base + extra;
+    }
+
+    function talentLevel(id){ return game.talents.levels[id] || 0; }
+    function multClickTalent(){ return 1 + talentLevel("t_click") * 0.10; }
+    function multPassiveTalent(){ return 1 + talentLevel("t_passive") * 0.10; }
+    function costRedux(){ return Math.max(0.5, 1 - talentLevel("t_cost") * 0.05); }
+    function offlineCap(){ return 8*60*60 + talentLevel("t_offline") * (2*60*60); }
+
+    function globalMultClick(){ return prestigeMultiplier() * multClickTalent() * multClickFromUpgrades(); }
+    function globalMultPassive(){ return prestigeMultiplier() * multPassiveTalent() * multPassiveFromUpgrades(); }
+
+    // Multiplicateurs cumulés via upgrades (limités à Lv.10)
+    function multClickFromUpgrades(){
+      let m = 1;
+      for(const u of UPGRADE_DEFS.filter(x=>x.type==="mult_click")){
+        const lv = getUpgradeLevel(u.id); for(let i=0;i<lv;i++) m *= u.amount;
+      }
+      return m;
+    }
+    function multPassiveFromUpgrades(){
+      let m = 1;
+      for(const u of UPGRADE_DEFS.filter(x=>x.type==="mult_passive")){
+        const lv = getUpgradeLevel(u.id); for(let i=0;i<lv;i++) m *= u.amount;
+      }
+      return m;
+    }
+
+    function showMoney(){
+      moneyEl.textContent = "$" + abbreviate(game.money);
+      lifetimeEl.textContent = "$" + abbreviate(game.lifetime);
+      clickGainEl.textContent = abbreviate(game.clickGain);
+      rateBadge.textContent = `${abbreviate(getRatePerSec()*globalMultPassive())} $/s`;
+      updatePrestigeUI();
+    }
+
+    function gainClick(){
+      const real = game.clickGain * globalMultClick();
+      game.money += real; game.lifetime += real; showMoney();
+      const pt = centerOf(document.getElementById("earnBtn")); spawnFloat(`+${abbreviate(real)}$`, pt.x, pt.y);
+    }
+
+    function canAfford(cost){ return game.money >= cost; }
+    function spend(cost){ game.money -= cost; }
+    function getUpgradeLevel(id){ return game.upgrades[id] || 0; }
+    function getProducerCount(id){ return game.producers[id] || 0; }
+
+    function applyUpgrade(def){
+      const cur = getUpgradeLevel(def.id);
+      if(cur >= def.max) return;
+      const price = nextCost(def.baseCost, cur);
+      if(!canAfford(price)) return;
+      spend(price);
+      game.upgrades[def.id] = cur + 1;
+
+      if(def.type === "add_click") game.clickGain += def.amount;
+      // mult_* appliqués via globalMult* (recalcul implicite)
+      showMoney(); save(false); renderUpgrades(); renderShop();
+    }
+
+    function getRatePerSec(){
+      let r = 0;
+      for(const p of SHOP_DEFS){ r += getProducerCount(p.id) * p.baseRate; }
+      return r;
+    }
+
+    function nextCost(base, level){ // level = actuel (avant achat)
+      const raw = Math.ceil(base * Math.pow(PRICE_GROWTH, level));
+      return Math.ceil(raw * costRedux());
+    }
+
+    /************** Prestige **************/
+    function prestigeAvailablePoints(){
+      const totalPossible = Math.floor(game.lifetime / PRESTIGE_THRESHOLD);
+      return Math.max(0, totalPossible - game.prestige.claimed);
+    }
+    function progressToNextPoint(){
+      const bucket = game.prestige.claimed;
+      const nextAt = (bucket + 1) * PRESTIGE_THRESHOLD, prevAt = bucket * PRESTIGE_THRESHOLD;
+      const clamped = Math.max(prevAt, Math.min(nextAt, game.lifetime));
+      const pct = ((clamped - prevAt) / (nextAt - prevAt || 1)) * 100;
+      const remain = Math.max(0, nextAt - game.lifetime);
+      return { pct, remain };
+    }
+    function updatePrestigeUI(){
+      const bonusPct = Math.round((prestigeMultiplier()-1)*100);
+      prestigeBadge.textContent = `P${game.prestige.points} (+${bonusPct}%)`;
+      const { pct } = progressToNextPoint();
+      prestigeMeterFill.style.width = pct.toFixed(1)+"%";
+      prestigeMeterLabel.textContent = pct.toFixed(0)+"%";
+    }
+    function refreshPrestigeModal(){
+      const available = prestigeAvailablePoints();
+      const bonusPct = Math.round((prestigeMultiplier()-1)*100);
+      const { pct, remain } = progressToNextPoint();
+      prestigePointsEl.textContent = game.prestige.points;
+      prestigeBonusPctEl.textContent = `+${bonusPct}%`;
+      prestigeAvailableEl.textContent = available;
+      prestigeModalMeterFill.style.width = pct.toFixed(1)+"%";
+      prestigeToNextEl.textContent = "$" + abbreviate(remain);
+      doPrestigeBtn.disabled = available<=0;
+      doPrestigeBtn.textContent = available>0 ? `Monter en Prestige (+${available} pt${available>1?'s':''})` : `Pas encore éligible`;
+      refreshTalentsPane();
+    }
+    function doPrestige(){
+      const available = prestigeAvailablePoints();
+      if(available <= 0) return;
+      game.prestige.points += available;
+      game.prestige.claimed += available;
+      // reset RUN uniquement
+      game.money=0; game.clickGain=1; game.upgrades={}; game.producers={}; game.lastTick=Date.now();
+      renderUpgrades(); renderShop(); showMoney(); save();
+      toast(`Prestige : +${available} point${available>1?'s':''}. Bonus total : +${Math.round((prestigeMultiplier()-1)*100)}%`);
+    }
+
+    /************** Talents **************/
+    function availableTalentTokens(){
+      const tokensFromPrestige = Math.floor(game.prestige.points / 5);
+      return Math.max(0, tokensFromPrestige - game.talents.spentTokens);
+    }
+    function buyTalent(t){
+      const lvl = talentLevel(t.id);
+      if(lvl >= t.max) return;
+      if(availableTalentTokens() <= 0) return;
+      game.talents.levels[t.id] = lvl + 1;
+      game.talents.spentTokens += 1;
+      renderUpgrades(); renderShop(); showMoney(); save(false);
+      refreshTalentsPane();
+    }
+    function refreshTalentsPane(){
+      talentTokensEl.textContent = availableTalentTokens();
+      talentsList.innerHTML = "";
+      TALENT_DEFS.forEach(t=>{
+        const lvl = talentLevel(t.id);
+        const can = availableTalentTokens()>0 && lvl < t.max;
+        const card = el(`
+          <div class="col-12 col-md-6">
+            <div class="shop-item ${can?'':'disabled'}">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <div class="fw-bold">${t.name} <span class="text-secondary">Lv.${lvl}/${t.max}</span></div>
+                  <div class="small text-secondary">${t.desc}</div>
+                </div>
+                <button class="btn btn-sm btn-accent" ${can?'':'disabled'} data-talent="${t.id}">
+                  <i class="bi bi-plus-circle"></i> Acheter (1 jeton)
+                </button>
+              </div>
+            </div>
+          </div>
+        `);
+        card.querySelector("[data-talent]")?.addEventListener("click", ()=> buyTalent(t));
+        talentsList.appendChild(card);
+      });
+    }
+
+    /************** UI Build **************/
+    function renderUpgrades(){
+      const wrap = $("#upgradesList"); wrap.innerHTML = "";
+      UPGRADE_DEFS.forEach(u=>{
+        const lv = getUpgradeLevel(u.id);
+        const price = nextCost(u.baseCost, lv);
+        const can = canAfford(price) && lv<u.max;
+        const tag = u.type.includes("click") ? "Clic" : "Passif";
+        const badge = u.type.includes("click") ? "success" : "info";
+        const card = el(`
+          <div class="col-12 col-md-6">
+            <button class="w-100 text-start shop-item ${can?'':'disabled'}" data-up="${u.id}">
+              <div class="d-flex align-items-center justify-content-between">
+                <div>
+                  <div class="fw-bold">${u.name} <span class="text-secondary">Lv.${lv}/${u.max}</span></div>
+                  <div class="small text-secondary">${u.desc}</div>
+                </div>
+                <div class="text-end">
+                  <div class="price">$${abbreviate(price)}</div>
+                  <div class="small text-${badge}"><i class="bi bi-arrow-up-right"></i> ${tag}</div>
+                </div>
+              </div>
+            </button>
+          </div>
+        `);
+        card.querySelector("[data-up]").addEventListener("click", ()=> applyUpgrade(u));
+        wrap.appendChild(card);
+      });
+    }
+
+    function renderShop(){
+      const wrap = $("#shopList"); wrap.innerHTML = "";
+      SHOP_DEFS.forEach(p=>{
+        const count = getProducerCount(p.id);
+        const price = nextCost(p.baseCost, count);
+        const can = canAfford(price);
+        const card = el(`
+          <div class="col-12 col-md-6">
+            <button class="w-100 text-start shop-item ${can?'':'disabled'}" data-prod="${p.id}">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-3">
+                  <div class="display-6"><i class="bi ${p.icon}"></i></div>
+                  <div>
+                    <div class="fw-bold">${p.name} <span class="text-secondary">x${count}</span></div>
+                    <div class="small text-secondary">+${abbreviate(p.baseRate)} $/s par unité (avant bonus)</div>
+                  </div>
+                </div>
+                <div class="text-end">
+                  <div class="price">$${abbreviate(price)}</div>
+                  <div class="small text-info"><i class="bi bi-lightning-charge"></i> Passif</div>
+                </div>
+              </div>
+            </button>
+          </div>
+        `);
+        card.querySelector("[data-prod]").addEventListener("click", ()=>{
+          const ct = getProducerCount(p.id);
+          const cost = nextCost(p.baseCost, ct);
+          if(!canAfford(cost)) return;
+          spend(cost);
+          game.producers[p.id] = ct + 1;
+          renderShop(); renderUpgrades(); showMoney(); save(false);
+        });
+        wrap.appendChild(card);
+      });
+    }
+
+    /************** Floating +X$ **************/
+    function centerOf(elm){ const r = elm.getBoundingClientRect(); return { x:r.left+r.width/2, y:r.top+r.height/2 }; }
+    function spawnFloat(text, x, y){
+      const g = el(`<div class="float-gain">${text}</div>`);
+      g.style.left = x + "px"; g.style.top = y + "px";
+      document.body.appendChild(g); setTimeout(()=> g.remove(), 900);
+    }
+
+    /************** Loop (passif fixe 1 Hz) **************/
+    let passiveTimer = null;
+    function startPassiveLoop(){
+      if(passiveTimer) clearInterval(passiveTimer);
+      passiveTimer = setInterval(()=>{
+        const perSec = getRatePerSec() * globalMultPassive();
+        if(perSec > 0){
+          game.money += perSec; game.lifetime += perSec;
+          const pt = centerOf(rateBadge); spawnFloat(`+${abbreviate(perSec)}$`, pt.x, pt.y);
+          showMoney(); save(false);
+        }
+      }, 1000);
+    }
+
+    function creditOffline(){
+      const now = Date.now();
+      const elapsed = Math.max(0, (now - game.lastTick)/1000);
+      const sec = Math.min(elapsed, offlineCap());
+      const inc = getRatePerSec() * globalMultPassive() * Math.floor(sec); // entier de secondes
+      if(inc > 0){
+        game.money += inc; game.lifetime += inc;
+        const pt = centerOf(rateBadge); spawnFloat(`+${abbreviate(inc)}$`, pt.x, pt.y);
+        toast(`+${abbreviate(inc)}$ gagnés hors-ligne (${fmt.format(Math.floor(sec))}s)`);
+      }
+      game.lastTick = now;
+    }
+
+    function toast(text){
+      const id = "toaster_" + Math.random().toString(36).slice(2);
+      const t = el(`
+        <div id="${id}" class="toast align-items-center text-bg-dark border-0" role="status" aria-live="polite" aria-atomic="true">
+          <div class="d-flex">
+            <div class="toast-body">${text}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+          </div>
+        </div>
+      `);
+      let cont = document.getElementById("toasterContainer");
+      if(!cont){
+        cont = el(`<div id="toasterContainer" class="toast-container position-fixed bottom-0 end-0 p-3"></div>`);
+        document.body.appendChild(cont);
+      }
+      cont.appendChild(t);
+      const toastObj = new bootstrap.Toast(t, { delay: 3000 });
+      toastObj.show();
+      t.addEventListener("hidden.bs.toast", ()=> t.remove());
+    }
+
+    /************** Buttons **************/
+    document.getElementById("earnBtn").addEventListener("click", gainClick);
+    document.getElementById("saveBtn").addEventListener("click", ()=>{ save(); toast("Sauvegarde enregistrée."); });
+    document.getElementById("resetBtn").addEventListener("click", ()=>{
+      const sure = confirm("⚠️ Reset TOTAL : efface Prestige, Talents, Lifetime et la run. Continuer ?");
+      if(!sure) return;
+      localStorage.removeItem(SAVE_KEY);
+      // FULL WIPE
+      game.money=0; game.lifetime=0; game.clickGain=1; game.upgrades={}; game.producers={};
+      game.prestige={ points:0, claimed:0 }; game.talents={ levels:{}, spentTokens:0 };
+      game.lastTick = Date.now();
+      renderUpgrades(); renderShop(); showMoney(); save();
+      toast("Tout a été réinitialisé.");
+    });
+    document.getElementById("openPrestige").addEventListener("click", refreshPrestigeModal);
+    doPrestigeBtn.addEventListener("click", ()=>{
+      const available = prestigeAvailablePoints();
+      if(available<=0){ toast("Pas encore éligible au Prestige."); return; }
+      if(!confirm(`Monter en Prestige ? Tu obtiendras +${available} point${available>1?'s':''}.`)) return;
+      doPrestige();
+      bootstrap.Modal.getOrCreateInstance("#prestigeModal").hide();
+      refreshPrestigeModal();
+    });
+
+    /************** Init **************/
+    function init(){
+      load();
+      game.upgrades ||= {}; game.producers ||= {};
+      game.prestige ||= { points:0, claimed:0 };
+      game.talents ||= { levels:{}, spentTokens:0 }; game.talents.levels ||= {};
+      showMoney(); renderUpgrades(); renderShop(); creditOffline(); save(); startPassiveLoop();
+    }
+    document.addEventListener("visibilitychange", ()=>{ if(document.hidden){ save(); } else { creditOffline(); showMoney(); save(false); }});
+    window.addEventListener("beforeunload", ()=> save());
+    init();
+  </script>
+</body>
+</html>
