@@ -337,7 +337,12 @@
       clickGainEl.textContent = abbreviate(game.clickGain);
       rateBadge.textContent = `${abbreviate(getRatePerSec()*globalMultPassive())} $/s`;
       updatePrestigeUI();
+    
+      // ✅ On met à jour l'état des boutons à chaque fois que l'argent change
+      renderUpgrades();
+      renderShop();
     }
+
 
     function gainClick(){
       const real = game.clickGain * globalMultClick();
@@ -357,11 +362,14 @@
       if(!canAfford(price)) return;
       spend(price);
       game.upgrades[def.id] = cur + 1;
-
+    
       if(def.type === "add_click") game.clickGain += def.amount;
-      // mult_* appliqués via globalMult* (recalcul implicite)
-      showMoney(); save(false); renderUpgrades(); renderShop();
+    
+      // Avant : renderUpgrades(); renderShop(); showMoney();
+      showMoney();
+      save(false);
     }
+
 
     function getRatePerSec(){
       let r = 0;
@@ -514,14 +522,13 @@
           </div>
         `);
         card.querySelector("[data-prod]").addEventListener("click", ()=>{
-          const ct = getProducerCount(p.id);
-          const cost = nextCost(p.baseCost, ct);
-          if(!canAfford(cost)) return;
-          spend(cost);
-          game.producers[p.id] = ct + 1;
-          renderShop(); renderUpgrades(); showMoney(); save(false);
-        });
-        wrap.appendChild(card);
+        const ct = getProducerCount(p.id);
+        const cost = nextCost(p.baseCost, ct);
+        if (!canAfford(cost)) return;
+        spend(cost);
+        game.producers[p.id] = ct + 1;
+        showMoney();
+        save(false);
       });
     }
 
