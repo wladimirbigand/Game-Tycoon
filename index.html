@@ -331,45 +331,10 @@
       return m;
     }
 
-    function showMoney(){
-      moneyEl.textContent = "$" + abbreviate(game.money);
-      lifetimeEl.textContent = "$" + abbreviate(game.lifetime);
-      clickGainEl.textContent = abbreviate(game.clickGain);
-      rateBadge.textContent = `${abbreviate(getRatePerSec()*globalMultPassive())} $/s`;
-      updatePrestigeUI();
-    
-      // ✅ On met à jour l'état des boutons à chaque fois que l'argent change
-      renderUpgrades();
-      renderShop();
-    }
-
-
-    function gainClick(){
-      const real = game.clickGain * globalMultClick();
-      game.money += real; game.lifetime += real; showMoney();
-      const pt = centerOf(document.getElementById("earnBtn")); spawnFloat(`+${abbreviate(real)}$`, pt.x, pt.y);
-    }
-
     function canAfford(cost){ return game.money >= cost; }
     function spend(cost){ game.money -= cost; }
     function getUpgradeLevel(id){ return game.upgrades[id] || 0; }
     function getProducerCount(id){ return game.producers[id] || 0; }
-
-    function applyUpgrade(def){
-      const cur = getUpgradeLevel(def.id);
-      if(cur >= def.max) return;
-      const price = nextCost(def.baseCost, cur);
-      if(!canAfford(price)) return;
-      spend(price);
-      game.upgrades[def.id] = cur + 1;
-    
-      if(def.type === "add_click") game.clickGain += def.amount;
-    
-      // Avant : renderUpgrades(); renderShop(); showMoney();
-      showMoney();
-      save(false);
-    }
-
 
     function getRatePerSec(){
       let r = 0;
@@ -380,6 +345,26 @@
     function nextCost(base, level){ // level = actuel (avant achat)
       const raw = Math.ceil(base * Math.pow(PRICE_GROWTH, level));
       return Math.ceil(raw * costRedux());
+    }
+
+    function showMoney(){
+      moneyEl.textContent = "$" + abbreviate(game.money);
+      lifetimeEl.textContent = "$" + abbreviate(game.lifetime);
+      clickGainEl.textContent = abbreviate(game.clickGain);
+      rateBadge.textContent = `${abbreviate(getRatePerSec()*globalMultPassive())} $/s`;
+      updatePrestigeUI();
+
+      // ✅ Rafraîchir l'état des upgrades + shop à chaque changement d'argent
+      renderUpgrades();
+      renderShop();
+    }
+
+    function gainClick(){
+      const real = game.clickGain * globalMultClick();
+      game.money += real; game.lifetime += real; 
+      showMoney();
+      const pt = centerOf(document.getElementById("earnBtn")); 
+      spawnFloat(`+${abbreviate(real)}$`, pt.x, pt.y);
     }
 
     /************** Prestige **************/
@@ -422,7 +407,8 @@
       game.prestige.claimed += available;
       // reset RUN uniquement
       game.money=0; game.clickGain=1; game.upgrades={}; game.producers={}; game.lastTick=Date.now();
-      renderUpgrades(); renderShop(); showMoney(); save();
+      showMoney(); 
+      save();
       toast(`Prestige : +${available} point${available>1?'s':''}. Bonus total : +${Math.round((prestigeMultiplier()-1)*100)}%`);
     }
 
@@ -437,7 +423,8 @@
       if(availableTalentTokens() <= 0) return;
       game.talents.levels[t.id] = lvl + 1;
       game.talents.spentTokens += 1;
-      renderUpgrades(); renderShop(); showMoney(); save(false);
+      showMoney();
+      save(false);
       refreshTalentsPane();
     }
     function refreshTalentsPane(){
@@ -467,6 +454,20 @@
     }
 
     /************** UI Build **************/
+    function applyUpgrade(def){
+      const cur = getUpgradeLevel(def.id);
+      if(cur >= def.max) return;
+      const price = nextCost(def.baseCost, cur);
+      if(!canAfford(price)) return;
+      spend(price);
+      game.upgrades[def.id] = cur + 1;
+
+      if(def.type === "add_click") game.clickGain += def.amount;
+      // mult_* appliqués via globalMult* (recalcul implicite)
+      showMoney(); 
+      save(false);
+    }
+
     function renderUpgrades(){
       const wrap = $("#upgradesList"); wrap.innerHTML = "";
       UPGRADE_DEFS.forEach(u=>{
@@ -522,13 +523,15 @@
           </div>
         `);
         card.querySelector("[data-prod]").addEventListener("click", ()=>{
-        const ct = getProducerCount(p.id);
-        const cost = nextCost(p.baseCost, ct);
-        if (!canAfford(cost)) return;
-        spend(cost);
-        game.producers[p.id] = ct + 1;
-        showMoney();
-        save(false);
+          const ct = getProducerCount(p.id);
+          const cost = nextCost(p.baseCost, ct);
+          if(!canAfford(cost)) return;
+          spend(cost);
+          game.producers[p.id] = ct + 1;
+          showMoney();
+          save(false);
+        });
+        wrap.appendChild(card);
       });
     }
 
@@ -599,7 +602,8 @@
       game.money=0; game.lifetime=0; game.clickGain=1; game.upgrades={}; game.producers={};
       game.prestige={ points:0, claimed:0 }; game.talents={ levels:{}, spentTokens:0 };
       game.lastTick = Date.now();
-      renderUpgrades(); renderShop(); showMoney(); save();
+      showMoney(); 
+      save();
       toast("Tout a été réinitialisé.");
     });
     document.getElementById("openPrestige").addEventListener("click", refreshPrestigeModal);
@@ -618,9 +622,20 @@
       game.upgrades ||= {}; game.producers ||= {};
       game.prestige ||= { points:0, claimed:0 };
       game.talents ||= { levels:{}, spentTokens:0 }; game.talents.levels ||= {};
-      showMoney(); renderUpgrades(); renderShop(); creditOffline(); save(); startPassiveLoop();
+      showMoney();               // -> renderUpgrades + renderShop
+      creditOffline();
+      save();
+      startPassiveLoop();
     }
-    document.addEventListener("visibilitychange", ()=>{ if(document.hidden){ save(); } else { creditOffline(); showMoney(); save(false); }});
+    document.addEventListener("visibilitychange", ()=>{ 
+      if(document.hidden){ 
+        save(); 
+      } else { 
+        creditOffline(); 
+        showMoney(); 
+        save(false); 
+      }
+    });
     window.addEventListener("beforeunload", ()=> save());
     init();
   </script>
